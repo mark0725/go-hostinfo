@@ -24,7 +24,7 @@ import (
 
 var (
 	postURL   = flag.String("url", "", "backend url")
-	interval  = flag.Duration("interval", 30*time.Second, "collect freq: 30s / 5m / 1h")
+	interval  = flag.Duration("interval", 0*time.Second, "collect freq: 30s / 5m / 1h")
 	showJSON  = flag.Bool("print", false, "print json to stdout")
 	httpCli   = &http.Client{Timeout: 10 * time.Second}
 	startTime = time.Now()
@@ -104,8 +104,6 @@ type LoadAverage struct {
 	Load15 float64 `json:"load15"`
 }
 
-// ------- 采集函数 -------
-
 func collect() (*HostInfo, error) {
 	now := time.Now()
 
@@ -150,7 +148,7 @@ func collect() (*HostInfo, error) {
 		Free:  vm.Free,
 	}
 
-	// Disk (只统计挂载点为 "/" 的分区，可按需扩展)
+	// Disk
 	var disks []DiskInfo
 	partitions, _ := disk.Partitions(false)
 	for _, p := range partitions {
@@ -186,19 +184,14 @@ func collect() (*HostInfo, error) {
 	}, nil
 }
 
-// ------- nvidia-smi 解析 -------
-
 func queryGPU() ([]GPUInfo, error) {
-	// 若无 nvidia-smi，直接返回空 slice
 	if _, err := exec.LookPath("nvidia-smi"); err != nil {
 		return nil, nil
 	}
 
-	// 版本信息
 	verOut, _ := exec.Command("nvidia-smi", "--version").Output()
 	driver, cuda := parseVersion(string(verOut))
 
-	// 主信息
 	queryArgs := []string{
 		"--query-gpu=index,gpu_uuid,name,temperature.gpu,power.draw,power.limit,memory.total,memory.used,memory.free,utilization.gpu",
 		"--format=csv,noheader,nounits",
@@ -208,7 +201,6 @@ func queryGPU() ([]GPUInfo, error) {
 		return nil, err
 	}
 
-	// 进程信息
 	procArgs := []string{
 		"--query-compute-apps=gpu_uuid,gpu_name,pid,process_name,used_memory",
 		"--format=csv,noheader,nounits",
@@ -290,8 +282,6 @@ func parseProc(out string) map[string][]GPUProc {
 	return res
 }
 
-// ------- util -------
-
 func atoi(s string) int {
 	v, _ := strconv.Atoi(strings.TrimSpace(s))
 	return v
@@ -300,8 +290,6 @@ func atof(s string) float64 {
 	v, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	return v
 }
-
-// ------- 发送 -------
 
 func send(info *HostInfo) error {
 	body, _ := json.Marshal(info)
@@ -324,12 +312,10 @@ func send(info *HostInfo) error {
 	return nil
 }
 
-// ------- main -------
-
 func main() {
 	flag.Parse()
 	if !*showJSON && *postURL == "" {
-		fmt.Fprintln(os.Stderr, "必须指定 -url 或使用 -print")
+		fmt.Fprintln(os.Stderr, "Usage Flag: -url or -print")
 		os.Exit(1)
 	}
 
